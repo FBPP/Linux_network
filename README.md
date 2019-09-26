@@ -156,7 +156,7 @@
 			exit(-1);
 		}
 ```	 
-	+ 自定义函数，函数除将源系统函数的名首字母大写外，参数、返回值应该与系统函数完全一样，（因为man不区分大小写，这样依然可以查看源系统函数)
++ 自定义函数，函数除将源系统函数的名首字母大写外，参数、返回值应该与系统函数完全一样，（因为man不区分大小写，这样依然可以查看源系统函数)
 	+ 将系统函数的调用和出错处理封装在自定义函数中
 + 在其他.c中调用自定义函数而非调用源系统函数，这样可以省去出错处理的代码
 ### read返回值
@@ -395,14 +395,15 @@
 + epoll反应堆使用的是event.data.ptr,ptr指向一个结构体
 	+ 这个结构体是自己定义的，但是一定要包含回调函数
 ``` 
-struct myevent_s{
-	 	 int fd；
-		 int events;
-		 void* arg;
-		 void(* call_back)(int fd, int events, void* arg);
-		 int status;
-		 char buf[BUFLEN];
-		 int len;
-		 long last_active;
-	 }
+struct myevents{
+		int fd; //文件描述符
+		int events; //对应的事件
+		void* arg; //泛型参数
+		void(* call_back)(int fd, int events, void* arg); //回调函数
+		int status; //文件描述符是否在红黑树上？在：1，不在：0
+		char buf[BUFLEN];
+		int len; //buf的长度
+		long last_active; //节点加入到红黑树上的时间，为了防止一个文件描述符保持连接但不发数据
+		//当超过一定时间都没有更新这个值的话，就会从红黑树中删除
+	 }；
 ```
