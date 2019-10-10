@@ -338,25 +338,30 @@
 	+ event 传递struct epoll_event类型的地址，监听事件的发生
 ### epoll_wait()
 + 开始监听
-+ int epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
-	+ epfd epoll_create()返回值
-	+ events struct epoll_event类型数组的首地址
-		+ 传出参数，传出符合监听要求的文件描述数组
-	+ maxevents events数组的容量
-	+ timeout 等待时间
-		+ -1 阻塞
-		+ 0 立刻返回，非阻塞
-		+ >0 指定等待时间后返回，毫秒
+`
+ int epoll_wait(int epfd, struct epoll_event* events, int maxevents, int timeout)
+`
++ epfd epoll_create()返回值
++ events struct epoll_event类型数组的首地址
+	+ 传出参数，传出符合监听要求的文件描述数组
++ maxevents events数组的容量
++ timeout 等待时间
+	+ -1 阻塞
+	+ 0 立刻返回，非阻塞
+	+ >0 指定等待时间后返回，毫秒
 + 成功：返回就绪的文件描述符个数，失败：-1，时间到没有就绪文件描述符返回0
 ### struct epoll_event
-+ {
-	+ uint32_t events;
-	+ epoll_data_t data;
-+ }
-	+ event指的是监听的事件，一般为
-		+ EPOLLIN 读
-		+ EPOLLOUT 写
-		+ EPOLLERR 出错
+```
+struct epoll_event
+ {
+	 uint32_t events;
+	 epoll_data_t data;
+ };
+```
++ event指的是监听的事件，一般为
+	+ EPOLLIN 读
+	+ EPOLLOUT 写
+	+ EPOLLERR 出错
 + typedef union epoll_data{
 	+  void *ptr;
 	+  int fd;
