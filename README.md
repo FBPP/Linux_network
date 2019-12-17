@@ -155,7 +155,7 @@
 			perror(s);
 			exit(-1);
 		}
-```	 
+```
 + 自定义函数，函数除将源系统函数的名首字母大写外，参数、返回值应该与系统函数完全一样，（因为man不区分大小写，这样依然可以查看源系统函数)
 	+ 将系统函数的调用和出错处理封装在自定义函数中
 + 在其他.c中调用自定义函数而非调用源系统函数，这样可以省去出错处理的代码
@@ -245,7 +245,7 @@
 + void FD_ISSET(int fd, fd_set* set)判断fd是否在set中
 + select的readfds writefds exceptfds均为传入传出参数，在传入时选择监听那些文件描述符，传出后将发生事件的文件描述符位置为1，未发生的置为0
 ### select的作用
-+ 指示内核等待多个事件中任何一个事件发生，并且仔仔有一个或多个事件发生或经历一段时间后唤醒它
++ 指示内核等待多个事件中任何一个事件发生，并且只在有一个或多个事件发生或经历一段时间后唤醒它
 + select告知内核对哪些文件描述符感兴趣以及等待多长时间
 	+ 不局限于socket
 ### select的缺点
@@ -279,22 +279,26 @@
 	+ 让每个客户用单独的线程服务
 	+ 设置I/O超时
 ## 2、poll 
-+ int poll(struct pollfd *fds, nfds_t nfds, int timeout)
-	+ fds 是一个struct pollfd的首地址
-	+ nfds 数组里元素的个数
-	+ timeout 等待时间返回
-		+ -1 阻塞等
-		+ 0 立刻返回
-		+ >0 等待指定毫秒数，如果系统时间不够毫秒，向上取值
-+ struct pollfd{
-	+ int fd; 文件描述符
-	+ short events； 监听的事件
-		+ 常用值
-		+ POLLIN 读
-		+ POLLOUT 写
-		+ POLLERR 出错
-	+ short revents; 返回的事件
-+ }
+```
+int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+	 fds 是一个struct pollfd的首地址
+	 nfds 数组里元素的个数
+	 timeout 等待时间返回
+		-1 阻塞等
+	 	0 立刻返回
+	 	>0 等待指定毫秒数，如果系统时间不够毫秒，向上取值
+
+
+ struct pollfd{
+	 int fd; 文件描述符
+	 short events； 监听的事件
+	 常用值
+		 POLLIN 读
+		 POLLOUT 写
+		 POLLERR 出错
+	 short revents; 返回的事件
+	 }
+```
 + 失败：-1 定时器到时间没有文件描述符就绪：0 其他情况：返回就绪描述符个数，即revents != 0的个数
 + 特点
 	+ 和select的思想一样，将监听请求的任务交给内核处理，但它是select的改进版
@@ -308,7 +312,7 @@
 				+ 上限
 		+ 注销用户或重启系统启用设置
 	+ 监听事件和返回事件的集合是分离的
-	+ 如果监听数组中的struct pollfd成员fd是一个赋值，则POLL会忽略这个成员的events，返回时将它的revents成员的值置为0
+	+ 如果监听数组中的struct pollfd成员fd是一个负值，则POLL会忽略这个成员的events，返回时将它的revents成员的值置为0
 	+ 不需要自定义一个文件描述符数组，而是使用struct pollfd
 		+ pollfd的 events 只能监听一中方式，如果想监听多种，在数组中加入相同fd但是events不同的成员
 		+ client数组的第0个值为服务端fd，和select的client数组不同，这个数组监听都是从1开始 
@@ -328,7 +332,7 @@
 	+ 失败返回-1，设置errno
 ### epoll_ctl()
 + 控制epoll监听文件描述符的哪些事件
-+ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+` int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)`
 	+ epfd epoll_create()函数的返回值
 	+ op 可以对文件描述符的控制有哪些(对树的操作)
 		+ EPOLL_CTL_ADD 增加节点
@@ -407,3 +411,67 @@ struct myevents{
 		//当超过一定时间都没有更新这个值的话，就会从红黑树中删除
 	 }；
 ```
++ epoll总共有三个数据结构,分别是:
+	+ 自定义的`struct my_events g_events[MAX_EVENTS + 1]`
+		+ 这个数组是为了保存每个文件描述相关的信息,元素常作为函数参数传递,以及epoll的event.data.ptr只想这个数组中的元素
+		+ \+ 1是指listenfd,listenfd放在数组的最后位置
+	+ `struct epoll_event events[MAX_EVENTS]`
+		+ epoll需要的事件数组,epoll会监听红黑树,并把响应的事件元素传入数组中
+	+ 保存`struct epoll_event` 内核红黑树 
+## 5.心跳包
++ 网洛已经建立连接后有可能发生非正常网络断开，如信号不好，网络掉线等，为了确实是非正常网络断开还是客户端真的想断开，就有了心跳检测机制
+### 心跳反映机制
++ 使用一个Heart-Beat线程，定时向客户端发送一个小型数据包，双方协议：该数据包有好的标志位，发送多少次如果没有回复就认为是客户端正常断开
+### 乒乓包
++ 在心跳包的基础上可以携带少量信息，对于双方不需要建立TCP连接但需要询问并且传输少量数据时，可以使用乒乓包
+### 设置TCP属性，探测分节
++ 几乎已经被淘汰
++ 使用setsockopt()设置属性
++ 如果2个小时双方没有任何数据交换，就会给对方发送探测分节，将发生以下三种情况之一
+	+ 对方回复ACK，表示一切正常
+	+ 对方回复RST，设置errno为`ECONNRESET`，并且close(socket)
+	+ 对方无相应,源自berkeley的TCP会发送另外8个探测分节,相隔75s一个,总共11分15秒,如果没有收到回应就会放弃,并设置errno为`ETIMEOUT`,这种还有第二种情况,若ICMP错误是"host unreachable",则设置errno为`EHOSHUNREACH`
+	+ 
+## 6.线程池
+### 线程池的作用
++ server监听事件的问题解决后接下来就是如何处理这些事件了
++ 如果每当有一个事件来就创建一个线程,每当事件解决就关闭线程,那在事件很多的情况下效率很低
++ 所以先创建好多个线程,让他们都阻塞于server的事件队列,当有事件发生时唤醒线程处理数据,这样就解决了创建销毁线程的开销
+	+ 维护的这些线程集合,就是线程池,这些线程只是逻辑上的线程池,而不是cup真的有一个线程池
+### 线程池分析
++ 生产者消费者模型(条件变量版)
++	两个条件变量
+	+	条件1:任务队列不为空,满足:换醒线程 不满足:阻塞线程
+	+	条件2:任务队列不为满,满足:唤醒server 不满足:阻塞server
++ 需要定义的相关属性
++ `min_thr_num` 还没有事件时创建的线程数初始值
++ `max_thr_num` 线程池的最大线程数
++ `default_step` (创建/删除)线程的步长
++ 计算线程数量的算法
+	+ `live_thr_num` 线程数总量 
+	+ `busy_thr_num` 工作中的线程数
+		+ 两者相减即为闲置线程数
+	+ 此算法计算出是该添加线程还是删除线程?数量是多少?  
+	+ 管理者线程:管理线程池的线程数 
+# 第四章:UDP服务器
+### 修改缓冲区大小
++ UDP没有流量控制,所有数据报照单全收,如果缓冲区没有空间,则收到的数据报全部丢弃
++ 修改缓冲区大小
+```
+	int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
+
+	int n  = 220 * 1024; /* 一个常用的缓冲区大小,保证效率的同时开销小 */
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &n, sizeof(n));
+```
+
+### UDP C/S 模型
++ UDP不需要建立连接,所以UDP服务器没有listen 和 accept
++ 服务器收到的数据会放到缓冲区中, 如果缓冲区已满, 则剩余的数据直接丢弃
++ 服务端的`recvfrom` 和 `sendto` 都需要传`(struct sockaddr *)sockaddr_in` 的地址和长度, 其中`recvfrom`中的是传出参数
++ UDP无连接, 只要对应IP地址和端口号, 即可发送和接受数据, 所已UDP服务器不需要IO复用, 它本身就是一对多的
+### 广播
++ 广播基于UDP协议, 目的ip中,子网ip设置为网段的brodcast地址, 会向一个网段中的所有ip发送数据报
++ socket默认不能进行广播地址, `setsockopt`函数和socket开放广播地址
++ server像broadcast地址发送数据, client从broadcast地址接收数据, server和client不直接发送数据, 而是通过broadcast间接发送, 双法通过其端口号发送/接受broadcast
+
+### 多播(组播)

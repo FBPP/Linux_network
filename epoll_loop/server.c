@@ -4,18 +4,21 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 #include <ctype.h>
-#include <strings.h>
+#include <string.h>
 #include <errno.h>
 #include "wrap.h"
 #include <limits.h>
 #include <poll.h>
 #include <sys/epoll.h>
+#include <fcntl.h>
+#include <time.h>
 
 #define SERV_IP "127.0.0.1"
 #define SERV_PORT 6666
 
 #define MAX_EVENTS 1024
 #define BUFLEN 4096
+#define LISTENEQ 128
 
 struct myevent_s{
 	int fd;
@@ -33,18 +36,19 @@ struct myevent_s g_events[MAX_EVENTS + 1];
 void eventset(struct myevent_s *ev, int fd, void(*call_back)(int, int, void *), void * arg)
 {
 	ev->fd = fd;
-	ev->cal_back = call_back;
+	ev->call_back = call_back;
 	ev->events = 0;
 	ev->arg = arg;
 	ev->status = 0;
-	memset(ev->buf, 0, sizeof(ev->buf));
-	ev->len = 0;
+	if(ev->len <= 0){
+		memset(ev->buf, 0, sizeof(ev->buf));
+		ev->len = 0;
+	} 
 	ev->last_active = time(NULL);
-
 	return;
 }
 
-void eventadd(int efd, int events, struct myevents_s *ev)
+void eventadd(int efd, int events, struct myevent_s *ev)
 {
 	struct epoll_event epv = {0, {0}};
 	int op;
@@ -52,9 +56,7 @@ void eventadd(int efd, int events, struct myevents_s *ev)
 	epv.data.ptr = ev;
 	epv.events = ev->events = events;
 
-	if(ev->status == 1)
-		op = EPOLL_CTL_MOD;
-	else{
+	if(ev->status == 0){
 		op = EPOLL_CTL_ADD;
 		ev->status = 1;
 	}
@@ -68,43 +70,14 @@ void eventdel(int efd, struct myevent_s *ev)
 	struct epoll_event epv = {0, {0}};
 	if(ev->status != 1)
 		return;
-	epv.data.ptr = ev;
+	epv.data.ptr = NULL;
 	ev->status= 0;
-	epoll_ctl(efd, EPOLL_CTL_DEL, ev->fd, &epv);
+	Epoll_ctl(efd, EPOLL_CTL_DEL, ev->fd, &epv);
 
 	return;
 }
 
-void initListenSocket(int efd, short port)
-{
-	int lfd = socket(AF_INET, SOCK_STREAM, 0);
-
-	int flag = fcntl(lfd, F_GETFL, 0);
-	fcntl(lfd, F_SETFL, flag | O_NONBLOCK);
-
-	/* void eventset(struct myevent_s *ev, int fd, 
-	   	void (*call_back)(int, int, void *), void *arg);
-	 */
-	eventset(&g_events[MAX_EVENTS], lfd, acceptconn, &g_events[MAX_EVENTS]);
-	/* void eventadd(int efd, int events, struct myevent_s *ev);	 
-	 */
-	eventadd(efd, EPOLLIN, &g_events[MAX_EVENTS]);
-	
-	struct sockaddr_in sin;
-	bzero(&sin, sizeof(servaddr));
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = htonl(INADDR_ANY);
-	sin.sin_port = htons(SERV_PORT);
-	
-	setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-	Bind(lfd, (struct sockaddr *)& servaddr, sizeof(servaddr));
-
-	Listen(listenfd, LISTENEQ);
-	return;
-
-}
-
+void senddata(int, int, void *);
 void recvdata(int fd, int events, void *arg)
 {
 	struct myevent_s *ev = (struct myevent_s *)arg;
@@ -123,17 +96,18 @@ void recvdata(int fd, int events, void *arg)
 		eventadd(g_efd, EPOLLOUT, ev);
 	}else if(len == 0){
 		close(ev->fd);
-		printf("[fd = %d] pos[%ld], closed\n", fd, ev->g_events);
+		printf("[fd = %d] pos[%d], closed\n", fd, ev->events);
 	}else{
 		close(ev->fd);
 		printf("recv[fd = %d]error[%d]:%s", fd, errno, strerror(errno));
 	}
 
 }
-void senddata(int fd, int events; void *arg)
+
+void senddata(int fd, int events, void *arg)
 {
 	struct myevent_s *ev = (struct myevent_s *)arg;
-	lnt len;
+	int  len;
 	
 	len = send(fd, ev->buf, ev->len, 0);
 
@@ -151,6 +125,8 @@ void senddata(int fd, int events; void *arg)
 
 }
 
+
+
 void acceptconn(int lfd, int events, void *arg)
 {
 	struct sockaddr_in cin;
@@ -164,33 +140,65 @@ void acceptconn(int lfd, int events, void *arg)
 			if(g_events[i].status == 0)
 				break;
 		if(i == MAX_EVENTS){
-			printf("%s: max connect limit[%d]\n", _func_, MAX_EVENTS);
+			printf("%s: max connect limit[%d]\n",  __func__, MAX_EVENTS);
 			break;
 		}
 
 		int flag = fcntl(cfd, F_GETFL, 0);
 		fcntl(cfd, F_GETFL, flag | O_NONBLOCK);
 
-		eventset(&g_events[i], cfd, recvdata, &g_event[i]);
+		eventset(&g_events[i], cfd, recvdata, &g_events[i]);
 		eventadd(g_efd, EPOLLIN, &g_events[i]);
 
 	}while(0);
 
 	char buf[INET_ADDRSTRLEN];
 	printf("new connect [%s:%d][time:%ld], pos[%d]",
-			inet_ntop(AF_INET, cfd.sin_addr.s_addr, buf, INET_ADDRSTRLEN),
+			inet_ntop(AF_INET, &cin.sin_addr.s_addr, buf, INET_ADDRSTRLEN),
 			ntohs(cin.sin_port),
-			g_events.last_active, 
+			g_events[i].last_active, 
 			i);
 }
 
-int main()
+void initListenSocket(int efd, short port)
+{
+	int lfd = socket(AF_INET, SOCK_STREAM, 0);
+
+	int flag = fcntl(lfd, F_GETFL, 0);
+	fcntl(lfd, F_SETFL, flag | O_NONBLOCK);
+
+	/* void eventset(struct myevent_s *ev, int fd, 
+	   	void (*call_back)(int, int, void *), void *arg);
+	 */
+	eventset(&g_events[MAX_EVENTS], lfd, acceptconn, &g_events[MAX_EVENTS]);
+	/* void eventadd(int efd, int events, struct myevent_s *ev);	 
+	 */
+	eventadd(efd, EPOLLIN, &g_events[MAX_EVENTS]);
+	
+	struct sockaddr_in sin;
+	bzero(&sin, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_addr.s_addr = htonl(INADDR_ANY);
+	sin.sin_port = htons(SERV_PORT);
+	int opt = 1;
+	setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+	Bind(lfd, (struct sockaddr *)& sin, sizeof(sin));
+
+	Listen(lfd, LISTENEQ);
+	return;
+
+}
+
+
+
+int main(int argc, char * argv[])
 {
 	unsigned short port = SERV_PORT;
 	if(argc == 2)
-		port = atoi(argv[i]);
+		port = atoi(argv[1]);
 
-	g_efd = Epoll_create(MAX_EVENT + 1);
+	g_efd = Epoll_create(MAX_EVENTS + 1);
 
 	initListenSocket(g_efd, port);	
 
@@ -202,25 +210,25 @@ int main()
 		long now = time(NULL);
 		for(i = 0; i < 100; i++, checkpos++)
 		{
-			if(checkops == MAX_EVENTS)
-				checkpos = 0;
+			if(checkpos == MAX_EVENTS)
+				checkpos = 0; 
 			if(g_events[checkpos].status != 1)
 				continue;
 			long duration = now - g_events[checkpos].last_active;
 
-			if(duration >= 60)
+			if(duration >= 10)
 			{
-				close(g_events[checkpos].fd);
-				printf("[fd=%d] timeoit\n", g_event[checkpos].fd);
 				eventdel(g_efd, &g_events[checkpos]);
+				Close(g_events[checkpos].fd);
+				printf("[fd=%d] timeoit\n", g_events[checkpos].fd);
 			}
 		}
 
-		int  nfd = Epoll_wait(g_efd, events, MAX_EVENTS + 1, 1000);
+		int  nfds = Epoll_wait(g_efd, events, MAX_EVENTS + 1, 1000);
 
 		for(i = 0; i < nfds; i++)
 		{
-			struct myevent_s *ev = (struct myevent_s)events[i].data.ptr;
+			struct myevent_s *ev = (struct myevent_s *)events[i].data.ptr;
 			if( (events[i].events & EPOLLIN) && (ev->events & EPOLLIN) )
 				ev->call_back(ev->fd, events[i].events, ev->arg);
 			if( (events[i].events & EPOLLOUT) && (ev->events & EPOLLOUT) )

@@ -90,7 +90,7 @@ ssize_t Readn(int fd, void * vptr, size_t n){
 	ssize_t nread;   //actually read bytes number
 	char * ptr;
 
-	ptr = vptr;
+	ptr = (char *)vptr;
 	nleft = n;
 	while(nleft > 0)
 	{
@@ -113,7 +113,7 @@ ssize_t Writen(int fd, const void * vptr, size_t n){
 	ssize_t nwritten;
 	const char * ptr;
 
-	ptr = vptr;
+	ptr = (char *)vptr;
 	nleft = n;
 	while(nleft > 0)
 	{
@@ -152,7 +152,7 @@ again:
 ssize_t Readline(int fd, void *vptr, size_t maxlen){
 	ssize_t n, rc;
 	char c, * ptr;
-	ptr = vptr;
+	ptr = (char *)vptr;
 
 	for(n = 1; n < maxlen; n++)
 	{
